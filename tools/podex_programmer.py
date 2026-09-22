@@ -4,7 +4,8 @@ import hashlib
 
 HANDSHAKE_TIMEOUT = 0.4
 PPAGE_ADDR = 0x00FF
-REF = 'c23d85d31bafe6ca75e97fe196b2b9bd'
+REF_FLASH = 'c23d85d31bafe6ca75e97fe196b2b9bd'
+REF_EEPROM = '4702072b19b5a9c0b0ba3bc192476e05'
 
 class PodexBDM:
     def __init__(self, port="/dev/ttyUSB0", baud=115200*4):
@@ -192,7 +193,7 @@ class PodexBDM:
         return self.memdump(addr, (length + 1) // 2)[:length]
 
     def write_eeprom_word(self, addr, word):
-        """
+        """NOTE: NOT TESTED AT ALL - CONSIDER BROKEN OR NON-WORKING
         Writes a single 16-bit word to EEPROM.
         Podex firmware (command 0x05) automatically handles the internal 
         erase-before-write timing cycle!
@@ -203,7 +204,8 @@ class PodexBDM:
         time.sleep(0.15) # EEPROM cycle takes ~10ms
 
     def write_eeprom(self, addr, data):
-        """Writes a byte array to EEPROM."""
+        """NOTE: NOT TESTED AT ALL - CONSIDER BROKEN OR NON-WORKING
+        Writes a byte array to EEPROM."""
         for i in range(0, len(data), 2):
             hi = data[i]
             lo = data[i+1] if i+1 < len(data) else 0xFF
@@ -214,6 +216,7 @@ class PodexBDM:
     # Flash Operations (Requires Upload of Machine Code Routine)
     # ----------------------------------------------------------------
     
+    # THE CODE BELOW IS UNTESTED - CONSIDER BROKEN AND NON-WORKING. RAM and FLASH MAPPING IS WRONG
     # Pre-assembled HC12 Machine Code for Flash Programming (Based on Freescale AN2166)
     # Assumes Bus Clock = 8MHz. 
     # Variables are mapped to RAM at 0x0800. Code is mapped to RAM at 0x0900.
@@ -252,6 +255,7 @@ class PodexBDM:
     ])
 
     erase_code = bytearray([
+    # THE CODE BELOW IS UNTESTED - CONSIDER BROKEN AND NON-WORKING. RAM and FLASH MAPPING IS WRONG
         0x18, 0x0B, 0x02, 0x00, 0xF7,  # movb #0x02, FEECTL  (ERAS=1)
         0xDE, 0x08, 0x00,              # ldx DEST_ADDR       (0x0800)
         0xED, 0x00,                    # std 0,X             (Latch address)
@@ -277,7 +281,8 @@ class PodexBDM:
     ])
 
     def _get_timing_vars(self, bus_freq_mhz=8):
-        """Calculates Flash timing variables (T_SHRT, T_NVH, T_FPGM) for the HC12 core."""
+        """NOTE: NOT TESTED AT ALL - CONSIDER BROKEN OR NON-WORKING
+        Calculates Flash timing variables (T_SHRT, T_NVH, T_FPGM) for the HC12 core."""
         x = bus_freq_mhz
         t_shrt = -x
         t_nvh = -10 * x
@@ -287,7 +292,8 @@ class PodexBDM:
                (t_fpgm & 0xFFFF).to_bytes(2, 'big')
 
     def erase_flash(self, addr, bus_freq_mhz=8):
-        """Erases a block of flash memory. Ensure block is 16KB/32KB aligned."""
+        """NOTE: NOT TESTED AT ALL - CONSIDER BROKEN OR NON-WORKING
+         Erases a block of flash memory. Ensure block is 16KB/32KB aligned."""
         t_shrt, t_nvh, t_fpgm = self._get_timing_vars(bus_freq_mhz)
         
         # 1. Initialize Variables at 0x0800
@@ -319,7 +325,8 @@ class PodexBDM:
         print(f"[+] Flash Erased successfully at 0x{addr:04X}")
 
     def write_flash(self, addr, data, bus_freq_mhz=8):
-        """Writes a byte array to Flash memory. Must be word-aligned."""
+        """NOTE: NOT TESTED AT ALL - CONSIDER BROKEN OR NON-WORKING
+        Writes a byte array to Flash memory. Must be word-aligned."""
         if len(data) % 2 != 0:
             data += b'\xFF' # Pad to even length
             
@@ -359,7 +366,6 @@ class PodexBDM:
         return self.memdump(addr, (length + 1) // 2)[:length]
 
 if __name__ == "__main__":
-    # CHANGE THIS TO YOUR ACTUAL PORT
     podex = PodexBDM(port='/dev/ttyUSB0') 
 
     if podex.check_version():
@@ -367,12 +373,11 @@ if __name__ == "__main__":
     else:
         raise SystemExit('podex is dead')
 
-    #podex.set_clock()
-    #podex.reset_mcu()
     podex.enter_bdm_mode()
 
     podex.regdump()
 
+    # READING WHOLE FLASH MEMORY
     if 1:
         all_flash = bytearray()
         md5 = hashlib.md5()
@@ -392,22 +397,23 @@ if __name__ == "__main__":
             print(f"Dumped Page {page}")
 
         hexdigest = md5.hexdigest()
-        print(hexdigest, REF == hexdigest and 'PASS' or 'FAIL')
+        print(hexdigest, REF_FLASH == hexdigest and 'PASS' or 'FAIL')
         # Save to a binary file
         with open("full_flash_dump.bin", "wb") as f:
             f.write(all_flash)
+
+    # READING WHOLE EEPROM MEMORY
+    if 1:
+        all_eeprom = bytearray()
+        md5 = hashlib.md5()
+        all_eeprom = podex.read_eeprom(0x0800, 2048)
+        print(f'Dumped {len(all_eeprom)} EEPROM bytes')
+
+        md5.update(all_eeprom)
+        hexdigest = md5.hexdigest()
+        print(hexdigest, REF_EEPROM == hexdigest and 'PASS' or 'FAIL')
+        # Save to a binary file
+        with open("full_eeprom_dump.bin", "wb") as f:
+            f.write(all_eeprom)
     
-   #3. Erase & Write Flash
-   #try:
-   #    # Erase flash block at 0x8000 (DG128A blocks are typically 16KB or 32KB aligned)
-   #    podex.erase_flash(0x8000) 
-   #    
-   #    # Write a test string to 0x8000
-   #    test_payload = b"Hello Podex HC12 BDM!" 
-   #    podex.write_flash(0x8000, test_payload)
-   #    
-   #    # Verify
-   #    verify = podex.read_flash(0x8000, len(test_payload))
-   #    print(f"Verification: {verify.decode('ascii')}")
-   #except Exception as e:
-   #    print(f"Error: {e}")
+

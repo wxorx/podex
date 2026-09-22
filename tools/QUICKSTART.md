@@ -3,7 +3,7 @@
 Hardware: podex on `/dev/ttyUSB0`, target powered. Nothing else needed.
 
 ```sh
-cd /home/ipdown/src/podex/tools
+cd ./tools
 
 # Optional one-time speedup (persists until replug/reboot):
 echo 1 | sudo tee /sys/bus/usb-serial/devices/ttyUSB0/latency_timer

@@ -744,7 +744,7 @@ def do_write_flash(bdm, args):
     if pad:
         data += b'\xFF' * pad
         print(f'[*] padded image to {len(data)} bytes (row alignment)')
-    if not args.yes and not args.verify_only:
+    if not args.yes:# and not args.verify_only:
         inp = input('Is the target flash range erased, or erase first? '
                     '[erase/skip/abort]: ')
         inp = inp.strip().lower()
